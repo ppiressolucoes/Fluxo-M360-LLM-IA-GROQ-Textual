@@ -1,0 +1,306 @@
+{
+  "name": "SUB - Classifica PEL | Categoria - Autor - Tags | GROQ v0.2",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## AUTOR | CATEGORIA | TAGS",
+        "height": 256,
+        "width": 416,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -96,
+        -48
+      ],
+      "typeVersion": 1,
+      "id": "5ae26ef6-4199-4799-a30c-a65721de7782",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Captura todos os itens vindos do nó do MySQL\nconst items = $input.all();\n\n// 2. Monta o cabeçalho da tabela Markdown com separadores\nlet tabelaMarkdown = \"id | tag | descrição | url\\n---|---|---|---\\n\";\n\n// 3. Percorre cada linha do banco de dados e adiciona à tabela\nitems.forEach(item => {\n  const id = item.json.id ?? '';\n  const tag = item.json.tag ?? '';\n  const descricao = item.json.descricao ?? '';\n  const url = item.json.url ?? '';\n  \n  \n  // Limpa possíveis quebras de linha internas para não quebrar a tabela\n  const descLimpa = String(descricao).replace(/\\r?\\n|\\r/g, \" \");\n\n  tabelaMarkdown += `${id} | ${tag} | ${descLimpa} | ${url}\\n`;\n});\n\n// 4. Retorna um único item estruturado para o n8n injetar no Agente de IA\nreturn [{\n  json: {\n    status: \"sucesso\",\n    total_registros: items.length,\n    tabela_analise: tabelaMarkdown.trim()\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        32
+      ],
+      "id": "ce2d9dc6-3017-42c3-93d1-ce67c17c2277",
+      "name": "Normaliza Tags"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Captura todos os itens vindos do nó do MySQL\nconst items = $input.all();\n\n// 2. Monta o cabeçalho da tabela Markdown com separadores\nlet tabelaMarkdown = \"id | categoria | descrição | url\\n---|---|---|---\\n\";\n\n// 3. Percorre cada linha do banco de dados e adiciona à tabela\nitems.forEach(item => {\n  const id = item.json.id ?? '';\n  const categoria = item.json.categoria ?? '';\n  const descricao = item.json.descricao ?? '';\n  const url = item.json.url ?? '';\n  \n  // Limpa possíveis quebras de linha internas para não quebrar a tabela\n  const descLimpa = String(descricao).replace(/\\r?\\n|\\r/g, \" \");\n\n  tabelaMarkdown += `${id} | ${categoria} | ${descLimpa} | ${url}\\n`;\n});\n\n// 4. Retorna um único item estruturado para o n8n injetar no Agente de IA\nreturn [{\n  json: {\n    status: \"sucesso\",\n    total_registros: items.length,\n    tabela_analise: tabelaMarkdown.trim()\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -608,
+        32
+      ],
+      "id": "e753a929-a42c-4b73-b650-102b61d4c5ac",
+      "name": "Normaliza Categoria"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "aMfJ1FNDs8nxGsWu",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/aMfJ1FNDs8nxGsWu",
+          "cachedResultName": "LLM GROQ | Classificador Categoria Textual - Pilot v1"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "prompt_user": "={{ $json.MSG_Prompt_User }}",
+            "prompt_system": "={{ $json.MSG_Prompt_System }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "prompt_user",
+              "displayName": "prompt_user",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "prompt_system",
+              "displayName": "prompt_system",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        160,
+        32
+      ],
+      "id": "9f7ae406-d667-4d7b-a0e9-d9b299e28c1d",
+      "name": "Chamada GROQ Cross"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0090da71-6a30-42a6-9f54-05e198af9740",
+              "name": "MSG_Prompt_User",
+              "value": "=Você é um classificador de conteúdo jornalístico pora portal de notícias.\n\nSua tarefa é analisar o TÍTULO e CONTEXTO da notícia e retornar:\n\n- 1 categoria obrigatória (apenas UMA)\n- de 1 a 3 tags relevantes\n- 1 autor obrigatório (1 apenas)\n\nTÍTULO: {{ $('Start Classificar').item.json.titulo }}\nCONTEXTO: {{ $('Start Classificar').item.json.contexto }}\n",
+              "type": "string"
+            },
+            {
+              "id": "ce645050-d6ea-47eb-aa0b-bf75feb8acfb",
+              "name": "MSG_Prompt_System",
+              "value": "=Você é um classificador editorial.\n\nSua tarefa é classificar o título e o contexto recebidos usando exclusivamente os catálogos fornecidos abaixo.\n\nREGRAS DE RESPOSTA:\n\n1. Retorne somente um objeto JSON válido.\n2. Não escreva explicações, comentários ou Markdown.\n3. Não invente IDs.\n4. Não use nomes de categorias, tags ou autores na resposta.\n5. Todos os valores devem ser IDs inteiros.\n6. Escolha exatamente uma categoria.\n7. Escolha de uma a três tags.\n8. Escolha exatamente um autor da lista AUTOR.\n9. A escolha do autor é aleatória entre os IDs permitidos.\n10. categoria_id deve existir exclusivamente no catálogo CATEGORIAS.\n11. Cada item de tags_ids deve existir exclusivamente no catálogo TAGS.\n12. Nunca use um ID de CATEGORIAS dentro de tags_ids.\n13. Nunca use um ID de TAGS em categoria_id.\n14. Não repita a categoria como tag.\n15. Se o nome aparecer nos dois catálogos, use o ID correspondente ao catálogo correto.\n16. Antes de responder, confira cada ID contra o catálogo de origem.\n\nCATÁLOGO CATEGORIAS:\n\n{{ $('Normaliza Categoria').item.json.tabela_analise }}\n\nCATÁLOGO TAGS:\n\n{{ $('Normaliza Tags').item.json.tabela_analise }}\n\nCATÁLOGO AUTOR:\n\n1, 2, 17\n\nVALIDAÇÃO INTERNA OBRIGATÓRIA:\n\n- categoria_id pertence ao CATÁLOGO CATEGORIAS;\n- todos os valores de tags_ids pertencem ao CATÁLOGO TAGS;\n- nenhum valor de tags_ids pertence apenas ao CATÁLOGO CATEGORIAS;\n- user_id pertence ao CATÁLOGO AUTOR;\n- tags_ids possui entre 1 e 3 valores;\n- todos os valores são inteiros;\n- não existem tags repetidas.\n\nFORMATO ÚNICO DE SAÍDA:\n\n{\n  \"user_id\": 1,\n  \"categoria_id\": 1,\n  \"tags_ids\": [75]\n}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -48,
+        32
+      ],
+      "id": "bc14d229-40c4-4148-8bd7-8667ddd10db8",
+      "name": "Agent LLM CMD"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT DISTINCT id_wp_origem AS id, txt_keyword AS categoria, dsc_keyword as descricao, dsc_url as url\nFROM WP_links_internos\nWHERE tpo_link = 'categoria'\n  AND ind_idioma = 'pt'\n  AND tpo_conteudo = 'energia'\n  AND ind_ativo = 1\nORDER BY id, ind_prioridade ASC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        -784,
+        32
+      ],
+      "id": "3825f946-c6af-475f-b5b3-de9bcadac8d3",
+      "name": "Busca Categoria PEL"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT DISTINCT id_wp_origem as id, txt_keyword as tag, dsc_keyword as descricao, dsc_url as url\nFROM WP_links_internos\nWHERE tpo_link = 'tag'\n        AND ind_idioma = 'pt'\n        AND tpo_conteudo = 'energia'\n        AND ind_ativo = 1\nORDER BY id, ind_prioridade ASC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        -432,
+        32
+      ],
+      "id": "adb5593e-ac55-4941-8e9d-6a9e7b1ad380",
+      "name": "Busca Tags PEL",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "titulo"
+            },
+            {
+              "name": "contexto"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -784,
+        -208
+      ],
+      "id": "64f2b303-7007-47fb-ad77-c362129d9b2e",
+      "name": "Start Classificar"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input =\n  $input.first()?.json ?? {};\n\nconst hasProperty = (\n  object,\n  property,\n) =>\n  Object.prototype.hasOwnProperty.call(\n    object ?? {},\n    property,\n  );\n\nconst toPositiveInteger = value => {\n  if (\n    value === null ||\n    value === undefined ||\n    value === ''\n  ) {\n    return null;\n  }\n\n  const number = Number(value);\n\n  return Number.isInteger(number) &&\n    number > 0\n    ? number\n    : null;\n};\n\nconst cleanText = value =>\n  String(value ?? '')\n    .replace(\n      /```json\\s*/gi,\n      '',\n    )\n    .replace(\n      /```\\s*$/g,\n      '',\n    )\n    .replace(\n      /[\\u200b-\\u200d\\ufeff]/g,\n      '',\n    )\n    .trim();\n\nconst parseJson = value => {\n  const text = cleanText(value);\n\n  if (!text) {\n    return null;\n  }\n\n  try {\n    return JSON.parse(text);\n  } catch {\n    return null;\n  }\n};\n\nconst sanitize = value =>\n  String(value ?? '')\n    .replace(\n      /Bearer\\s+[A-Za-z0-9._~+/=-]+/gi,\n      'Bearer [REDACTED]',\n    )\n    .replace(/\\s+/g, ' ')\n    .trim()\n    .slice(0, 500);\n\nconst errorResult = (\n  code,\n  diagnostic,\n  details = [],\n) => [\n  {\n    json: {\n      _route: 'error',\n      status: 'error',\n      validation_ok: false,\n\n      erro: {\n        codigo: code,\n        categoria: 'validation',\n        diagnostico: diagnostic,\n        detalhes: details,\n      },\n    },\n  },\n];\n\nconst isClassificationObject = value =>\n  value &&\n  typeof value === 'object' &&\n  !Array.isArray(value) &&\n  (\n    hasProperty(value, 'autor') ||\n    hasProperty(value, 'autor_id') ||\n    hasProperty(value, 'user_id') ||\n    hasProperty(value, 'autoria') ||\n    hasProperty(value, 'categories') ||\n    hasProperty(value, 'categoria_id') ||\n    hasProperty(value, 'categoria') ||\n    hasProperty(value, 'tags') ||\n    hasProperty(value, 'tags_ids')\n  );\n\nconst findClassification = (\n  value,\n  depth = 0,\n) => {\n  if (\n    depth > 8 ||\n    value === null ||\n    value === undefined\n  ) {\n    return null;\n  }\n\n  if (isClassificationObject(value)) {\n    return value;\n  }\n\n  if (Array.isArray(value)) {\n    for (const item of value) {\n      const result =\n        findClassification(\n          item,\n          depth + 1,\n        );\n\n      if (result) {\n        return result;\n      }\n    }\n\n    return null;\n  }\n\n  if (typeof value !== 'object') {\n    return null;\n  }\n\n  for (const child of Object.values(value)) {\n    const result =\n      findClassification(\n        child,\n        depth + 1,\n      );\n\n    if (result) {\n      return result;\n    }\n  }\n\n  return null;\n};\n\nlet classification =\n  findClassification(input);\n\nlet parseMethod =\n  classification\n    ? 'structured_object'\n    : null;\n\n/*\n * Compatibilidade com resposta antiga:\n * { text: \"{\\\"user_id\\\":...}\" }\n */\nif (\n  !classification &&\n  typeof input.text === 'string'\n) {\n  classification =\n    parseJson(input.text);\n\n  if (classification) {\n    parseMethod =\n      'legacy_text_json';\n  }\n}\n\n/*\n * Compatibilidade com resposta encapsulada\n * no body ou choices do HTTP.\n */\nif (!classification) {\n  const modelContent =\n    input?.body?.choices?.[0]?.message?.content ??\n    input?.choices?.[0]?.message?.content ??\n    input?.content ??\n    '';\n\n  classification =\n    parseJson(modelContent);\n\n  if (classification) {\n    parseMethod =\n      'nested_model_json';\n  }\n}\n\nif (!classification) {\n  return errorResult(\n    'CLASSIFICATION_NOT_FOUND',\n    'Nenhuma classificação foi encontrada na entrada.',\n  );\n}\n\n/*\n * Propaga erro do fluxo Filho sem criar\n * valores padrão.\n */\nif (\n  classification.status === 'error' ||\n  classification._route === 'error' ||\n  classification.erro\n) {\n  return errorResult(\n    classification.erro?.codigo ??\n      classification.code ??\n      'CLASSIFICATION_FAILED',\n\n    sanitize(\n      classification.erro?.diagnostico ??\n        classification.diagnostic ??\n        'O fluxo Filho retornou erro.',\n    ),\n\n    classification.erro?.detalhes ??\n      [],\n  );\n}\n\nconst toIdArray = value => {\n  const values = Array.isArray(value)\n    ? value\n    : value === null ||\n      value === undefined ||\n      value === ''\n      ? []\n      : [value];\n\n  return values\n    .map(toPositiveInteger)\n    .filter(value => value !== null);\n};\n\nconst autorId =\n  toPositiveInteger(\n    classification.autor_id ??\n      classification.user_id ??\n      classification.autoria ??\n      (\n        Array.isArray(\n          classification.autor,\n        )\n          ? classification.autor[0]\n          : classification.autor\n      ),\n  );\n\nconst categoriaId =\n  toPositiveInteger(\n    classification.categoria_id ??\n      classification.categoria ??\n      (\n        Array.isArray(\n          classification.categories,\n        )\n          ? classification.categories[0]\n          : classification.categories\n      ),\n  );\n\nconst tagsIds =\n  toIdArray(\n    classification.tags_ids ??\n      classification.tags,\n  );\n\nconst details = [];\n\n/*\n * O autor é genérico.\n * Nenhum ID é fixado no código.\n */\nif (\n  autorId === null ||\n  autorId <= 0\n) {\n  details.push({\n    field: 'autor_id',\n    code: 'INVALID_AUTHOR_ID',\n    message:\n      'O autor deve ser um ID inteiro positivo.',\n    received: autorId,\n  });\n}\n\nif (\n  categoriaId === null ||\n  categoriaId <= 0\n) {\n  details.push({\n    field: 'categoria_id',\n    code: 'INVALID_CATEGORY_ID',\n    message:\n      'A categoria deve ser um ID inteiro positivo.',\n    received: categoriaId,\n  });\n}\n\nif (\n  tagsIds.length < 1 ||\n  tagsIds.length > 3\n) {\n  details.push({\n    field: 'tags_ids',\n    code: 'INVALID_TAG_COUNT',\n    message:\n      'A classificação deve conter de 1 a 3 tags.',\n    received: tagsIds,\n  });\n}\n\nif (\n  new Set(tagsIds).size !==\n  tagsIds.length\n) {\n  details.push({\n    field: 'tags_ids',\n    code: 'DUPLICATE_TAGS',\n    message:\n      'As tags não podem ser repetidas.',\n    received: tagsIds,\n  });\n}\n\nif (details.length > 0) {\n  return errorResult(\n    'INVALID_CLASSIFICATION_STRUCTURE',\n    'A resposta não possui uma estrutura válida.',\n    details,\n  );\n}\n\n/*\n * Os catálogos são obtidos dinamicamente\n * dos nodes do próprio fluxo PAI.\n */\nlet categoryItems = [];\nlet tagItems = [];\n\ntry {\n  categoryItems =\n    $('Busca Categoria PEL')\n      .all()\n      .map(item => item.json);\n\n  tagItems =\n    $('Busca Tags PEL')\n      .all()\n      .map(item => item.json);\n} catch {\n  return errorResult(\n    'CATALOG_NODES_UNAVAILABLE',\n    'Os nodes de catálogo do PAI não estão disponíveis.',\n  );\n}\n\nconst categoryIds =\n  new Set(\n    categoryItems\n      .map(item =>\n        toPositiveInteger(\n          item.id ??\n            item.id_wp_origem ??\n            item.categoria_id,\n        ),\n      )\n      .filter(value => value !== null),\n  );\n\nconst tagCatalogIds =\n  new Set(\n    tagItems\n      .map(item =>\n        toPositiveInteger(\n          item.id ??\n            item.id_wp_origem ??\n            item.tag_id,\n        ),\n      )\n      .filter(value => value !== null),\n  );\n\nif (\n  categoryIds.size === 0\n) {\n  return errorResult(\n    'CATEGORY_CATALOG_EMPTY',\n    'O catálogo de categorias do PAI está vazio.',\n  );\n}\n\nif (\n  tagCatalogIds.size === 0\n) {\n  return errorResult(\n    'TAG_CATALOG_EMPTY',\n    'O catálogo de tags do PAI está vazio.',\n  );\n}\n\nif (\n  !categoryIds.has(categoriaId)\n) {\n  details.push({\n    field: 'categoria_id',\n    code: 'CATEGORY_NOT_IN_CATALOG',\n    message:\n      'A categoria não pertence ao catálogo do PAI.',\n    received: categoriaId,\n  });\n}\n\nconst invalidTags =\n  tagsIds.filter(\n    tagId =>\n      !tagCatalogIds.has(tagId),\n  );\n\nif (invalidTags.length > 0) {\n  details.push({\n    field: 'tags_ids',\n    code: 'TAGS_NOT_IN_CATALOG',\n    message:\n      'Uma ou mais tags não pertencem ao catálogo do PAI.',\n    received: invalidTags,\n  });\n}\n\nif (details.length > 0) {\n  return errorResult(\n    'CLASSIFICATION_OUTSIDE_CATALOG',\n    'A classificação contém IDs ausentes nos catálogos do PAI.',\n    details,\n  );\n}\n\nreturn [\n  {\n    json: {\n      _route: 'result',\n      status: 'success',\n      validation_ok: true,\n\n      autor: [autorId],\n      categories: [categoriaId],\n      tags: tagsIds,\n\n      autor_id: autorId,\n      categoria_id: categoriaId,\n      tags_ids: tagsIds,\n\n      ai_parse_status: 'ok',\n      ai_parse_method: parseMethod,\n      catalog_validation: 'parent_catalog',\n\n      category_catalog_size:\n        categoryIds.size,\n\n      tag_catalog_size:\n        tagCatalogIds.size,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        32
+      ],
+      "id": "c4579f97-b09f-4310-b775-ef436ad5ff2b",
+      "name": "OUTPUT: Validar Categoria",
+      "executeOnce": true
+    }
+  ],
+  "pinData": {
+    "Start Classificar": [
+      {
+        "json": {
+          "titulo": "Magda Chambriard afirma que Petrobras se tornou empresa de energia e renováveis",
+          "contexto": "A presidente da Petrobras, Magda Chambriard, anunciou a redefinição estratégica da companhia para se consolidar como uma empresa ampla de energia, priorizando biocombustíveis e inovação sustentável."
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Normaliza Tags": {
+      "main": [
+        [
+          {
+            "node": "Agent LLM CMD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normaliza Categoria": {
+      "main": [
+        [
+          {
+            "node": "Busca Tags PEL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chamada GROQ Cross": {
+      "main": [
+        [
+          {
+            "node": "OUTPUT: Validar Categoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent LLM CMD": {
+      "main": [
+        [
+          {
+            "node": "Chamada GROQ Cross",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Busca Categoria PEL": {
+      "main": [
+        [
+          {
+            "node": "Normaliza Categoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Busca Tags PEL": {
+      "main": [
+        [
+          {
+            "node": "Normaliza Tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Classificar": {
+      "main": [
+        [
+          {
+            "node": "Busca Categoria PEL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "5718230d-818a-41dc-8de1-54c4773ee301",
+  "meta": {},
+  "nodeGroups": [],
+  "id": "V9Azc3ymTQwEkYtl",
+  "tags": [
+    {
+      "updatedAt": "2026-01-08T05:33:57.298Z",
+      "createdAt": "2026-01-08T05:33:57.298Z",
+      "id": "hzAK1JL2yg3GOtkf",
+      "name": "Wordpress"
+    }
+  ]
+}
