@@ -32,4 +32,4 @@ Os exports não incluem valores de chaves de API. O node HTTP obtém a chave din
 - Credenciais são específicas de cada instância n8n e precisam ser vinculadas localmente.
 ## Retry de respostas incompletas
 
-O workflow Pilot v1 trata finish_reason length e respostas JSON incompletas como falhas de resposta, encaminhando-as para retry. A primeira chamada usa 1024 tokens de conclusão; as novas tentativas ampliam o limite progressivamente até 4096 e mantêm response_format json_object.
+O workflow Pilot v1 trata finish_reason length e respostas JSON incompletas como falhas de resposta, encaminhando-as para retry. A primeira chamada usa 1024 tokens de conclusão; as novas tentativas ampliam o limite progressivamente até 3072 e mantêm response_format json_object.
