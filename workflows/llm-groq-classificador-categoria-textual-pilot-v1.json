@@ -125,7 +125,7 @@
       "executeOnce": false,
       "retryOnFail": false,
       "waitBetweenTries": 5000,
-      "onError": "continueErrorOutput"
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -337,6 +337,54 @@
         912,
         -192
       ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input =\n  $input.first()?.json ?? {};\n\nconst body =\n  input.body ?? input;\n\nconst statusCode = Number(\n  input.statusCode ??\n  input.status_code ??\n  input.httpStatus ??\n  input.http_status ??\n  body?.statusCode ??\n  0,\n);\n\nconst isSuccess =\n  statusCode >= 200 &&\n  statusCode < 300 &&\n  Array.isArray(body?.choices);\n\nif (isSuccess) {\n  return [\n    {\n      json: {\n        ...input,\n        _route: 'response',\n        status: 'ready',\n      },\n    },\n  ];\n}\n\nreturn [\n  {\n    json: {\n      _route: 'error',\n      status: 'error',\n      statusCode: statusCode || null,\n      body,\n      message:\n        input.message ??\n        body?.message ??\n        body?.error?.message ??\n        'A chamada HTTP ao Groq retornou erro.',\n    },\n  },\n];"
+      },
+      "id": "a9dd81cb-7c8e-46ca-9bf7-9d63b4f8f5a1",
+      "name": "Normalizar Retorno HTTP Groq",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f3bfb44d-9305-4f1c-9c08-5bcb29df5f22",
+              "leftValue": "={{ $json._route === 'error' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c4d69320-6a70-4ab0-8b4b-0afc60cf7d49",
+      "name": "IF | HTTP Groq com erro?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        736,
+        32
+      ]
     }
   ],
   "pinData": {
@@ -408,14 +456,7 @@
       "main": [
         [
           {
-            "node": "Validar Classificação Saída v0.2",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Normalizar Erro Groq",
+            "node": "Normalizar Retorno HTTP Groq",
             "type": "main",
             "index": 0
           }
@@ -542,6 +583,35 @@
           }
         ],
         []
+      ]
+    },
+    "Normalizar Retorno HTTP Groq": {
+      "main": [
+        [
+          {
+            "node": "IF | HTTP Groq com erro?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF | HTTP Groq com erro?": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Erro Groq",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validar Classificação Saída v0.2",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },

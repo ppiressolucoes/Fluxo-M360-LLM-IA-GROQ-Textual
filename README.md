@@ -33,3 +33,6 @@ Os exports não incluem valores de chaves de API. O node HTTP obtém a chave din
 ## Retry de respostas incompletas
 
 O workflow Pilot v1 trata finish_reason length e respostas JSON incompletas como falhas de resposta, encaminhando-as para retry. A primeira chamada usa 1024 tokens de conclusão; as novas tentativas ampliam o limite progressivamente até 3072 e mantêm response_format json_object.
+## Tratamento de erros HTTP
+
+O node HTTP Groq usa saída regular (Continue On Fail). O node Normalizar Retorno HTTP Groq identifica sucesso ou erro e o node IF | HTTP Groq com erro? encaminha erros para Normalizar Erro Groq e respostas válidas para Validar Classificação Saída v0.2. O output de erro dedicado do node HTTP não é usado.
