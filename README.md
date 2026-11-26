@@ -30,3 +30,6 @@ Os exports não incluem valores de chaves de API. O node HTTP obtém a chave din
 
 - Os exports mantêm os IDs dos workflows e nodes para facilitar a referência entre eles; ao importar em uma instância com IDs diferentes, ajuste a chamada entre workflows.
 - Credenciais são específicas de cada instância n8n e precisam ser vinculadas localmente.
+## Retry de respostas incompletas
+
+O workflow Pilot v1 trata finish_reason length e respostas JSON incompletas como falhas de resposta, encaminhando-as para retry. A primeira chamada usa 1024 tokens de conclusão; as novas tentativas ampliam o limite progressivamente até 4096 e mantêm response_format json_object.
