@@ -4,7 +4,8 @@ Exports versionados dos workflows n8n para classificação editorial de categori
 
 ## Workflows
 
-- [Classificador Categoria Textual — Pilot v1](workflows/llm-groq-classificador-categoria-textual-pilot-v1.json)
+- [Classificador Categoria Textual — v0.2 (atual)](workflows/llm-groq-classificador-categoria-textual-v0.2.json)
+- [Classificador Categoria Textual — Pilot v1 (histórico)](workflows/llm-groq-classificador-categoria-textual-pilot-v1.json)
 - [INTER AI Cross Account Textual](workflows/llm-groq-inter-ai-cross-account-textual.json)
 - [SUB — Classifica PEL: Categoria, Autor e Tags — GROQ v0.2](workflows/sub-classifica-pel-categoria-autor-tags-groq-v0.2.json)
 
@@ -36,3 +37,6 @@ O workflow Pilot v1 trata finish_reason length e respostas JSON incompletas como
 ## Tratamento de erros HTTP
 
 O node HTTP Groq usa saída regular (Continue On Fail). O node Normalizar Retorno HTTP Groq identifica sucesso ou erro e o node IF | HTTP Groq com erro? encaminha erros para Normalizar Erro Groq e respostas válidas para Validar Classificação Saída v0.2. O output de erro dedicado do node HTTP não é usado.
+## Versão atual
+
+O export v0.2 é a versão consolidada do classificador. Ele usa saída regular no node HTTP, normaliza sucesso e erro antes do IF, mantém os dois IFs com comparação is false para organizar o desenho e encaminha respostas incompletas para retry.

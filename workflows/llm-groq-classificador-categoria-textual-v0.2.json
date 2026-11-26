@@ -1,0 +1,628 @@
+{
+  "name": "LLM GROQ | Classificador Categoria Textual v0.2",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "prompt_user"
+            },
+            {
+              "name": "prompt_system"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -704,
+        -64
+      ],
+      "id": "31f67e58-e5a4-4e29-bf30-984e577b6767",
+      "name": "Start Classificar"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CALL sp_get_api('groq');",
+        "options": {}
+      },
+      "id": "e5c07c06-d052-443d-8252-cc78b09a1eb1",
+      "name": "SP Selecionar API Groq",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        -496,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw =\n  $input.first()?.json ?? {};\n\nconst start =\n  $('Start Classificar')\n    .first()\n    ?.json ?? {};\n\nconst maxAttempts = 3;\n\nlet previousAttempt = 0;\n\ntry {\n  const previousErrors =\n    $('Normalizar Erro Groq')\n      .all()\n      .map(item => item.json)\n      .filter(Boolean);\n\n  const lastError =\n    previousErrors.at(-1);\n\n  previousAttempt =\n    Number(\n      lastError?.attempt ?? 0,\n    );\n} catch {\n  previousAttempt = 0;\n}\n\nconst attempt =\n  previousAttempt + 1;\n\nconst promptUser =\n  String(\n    start.prompt_user ??\n    start.MSG_Prompt_User ??\n    '',\n  ).trim();\n\nconst promptSystem =\n  String(\n    start.prompt_system ??\n    start.MSG_Prompt_System ??\n    '',\n  ).trim();\n\nconst findApiRecord = (\n  value,\n  depth = 0,\n) => {\n  if (\n    depth > 8 ||\n    value === null ||\n    value === undefined\n  ) {\n    return null;\n  }\n\n  if (Array.isArray(value)) {\n    for (const item of value) {\n      const found =\n        findApiRecord(\n          item,\n          depth + 1,\n        );\n\n      if (found) {\n        return found;\n      }\n    }\n\n    return null;\n  }\n\n  if (\n    typeof value !== 'object'\n  ) {\n    return null;\n  }\n\n  if (\n    'dsc_api_key' in value ||\n    'dsc_plataforma' in value ||\n    'dsc_status' in value\n  ) {\n    return value;\n  }\n\n  for (\n    const child of Object.values(value)\n  ) {\n    const found =\n      findApiRecord(\n        child,\n        depth + 1,\n      );\n\n    if (found) {\n      return found;\n    }\n  }\n\n  return null;\n};\n\nconst api =\n  findApiRecord(raw);\n\nconst errorResult = (\n  code,\n  category,\n  diagnostic,\n) => [\n  {\n    json: {\n      _route: 'result',\n      status: 'error',\n\n      code,\n      category,\n      diagnostic,\n\n      attempt,\n      max_attempts: maxAttempts,\n\n      prompt_user: promptUser,\n      prompt_system: promptSystem,\n\n      retry_with_another_api:\n        false,\n    },\n  },\n];\n\nif (!promptUser) {\n  return errorResult(\n    'PROMPT_USER_REQUIRED',\n    'validation',\n    'O prompt_user não foi recebido.',\n  );\n}\n\nif (!promptSystem) {\n  return errorResult(\n    'PROMPT_SYSTEM_REQUIRED',\n    'validation',\n    'O prompt_system não foi recebido.',\n  );\n}\n\nif (\n  !api ||\n  api.id === null ||\n  api.id === undefined ||\n  !api.dsc_api_key\n) {\n  return errorResult(\n    'NO_API_AVAILABLE',\n    'capacity',\n    String(\n      api?.dsc_status ??\n      'Nenhuma API Groq disponível.',\n    ).slice(0, 500),\n  );\n}\n\nconst platform =\n  String(\n    api.dsc_plataforma ??\n    '',\n  )\n    .trim()\n    .toLowerCase();\n\nif (platform !== 'groq') {\n  return errorResult(\n    'PLATFORM_MISMATCH',\n    'configuration',\n    'A API selecionada não pertence à plataforma Groq.',\n  );\n}\n\nconst model =\n  String(\n    api.dsc_url_servico ??\n    '',\n  )\n    .trim()\n    .replace(\n      /^models\\//,\n      '',\n    );\n\nif (!model) {\n  return errorResult(\n    'MODEL_NOT_CONFIGURED',\n    'configuration',\n    'dsc_url_servico não contém um modelo Groq.',\n  );\n}\n\nreturn [\n  {\n    json: {\n      _route: 'request',\n      status: 'ready',\n\n      attempt,\n      max_attempts: maxAttempts,\n\n      api_id: Number(api.id),\n      api_key: String(api.dsc_api_key),\n      model,\n\n      prompt_user: promptUser,\n      prompt_system: promptSystem,\n\n      request_body: {\n        model,\n        temperature: 0,\n        reasoning_effort: 'low',\n        stream: false,\n\n        /*\n         * 512 evita que o raciocínio do modelo\n         * consuma todo o espaço da resposta JSON.\n         */\n        max_completion_tokens: 1024,\n\n        response_format: {\n          type: 'json_object',\n        },\n\n        messages: [\n          {\n            role: 'system',\n            content: promptSystem,\n          },\n          {\n            role: 'user',\n            content: promptUser,\n          },\n        ],\n      },\n    },\n  },\n];"
+      },
+      "id": "3bf2c6a6-6807-459a-b5e2-3fe6598a7b15",
+      "name": "Associar API a Tarefa",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -304,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a7259dfa-9ead-43a7-bb83-0ef1b0381008",
+              "leftValue": "={{ $json._route }}",
+              "rightValue": "request",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8e635aab-e364-4305-a6d2-d410f2bbb1bf",
+      "name": "API Disponivel?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -128,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $json.api_key }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.request_body }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 45000
+        }
+      },
+      "id": "d3ada3af-3f86-49c2-a47e-45a84ef0f471",
+      "name": "HTTP Groq Chat Completions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        96,
+        -80
+      ],
+      "executeOnce": false,
+      "retryOnFail": false,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE Config_API_IA\nSET\n    dth_bloqueio_ate = DATE_ADD(\n        DATE_SUB(\n            UTC_TIMESTAMP(),\n            INTERVAL 3 HOUR\n        ),\n        INTERVAL 60 MINUTE\n    ),\n    dsc_status = 'Congelada 60min: {{ $json.code }}'\nWHERE id = {{\n    Number.isInteger(Number($json.api_id))\n        ? Number($json.api_id)\n        : -1\n}};",
+        "options": {}
+      },
+      "id": "b557b07a-ac2e-4900-90ec-7cc559b233c9",
+      "name": "ERRO | Congelar API",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        1232,
+        208
+      ],
+      "alwaysOutputData": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input =\n  $input.first()?.json ?? {};\n\nconst sanitize = value =>\n  String(value ?? '')\n    .replace(\n      /Bearer\\s+[A-Za-z0-9._~+/=-]+/gi,\n      'Bearer [REDACTED]',\n    )\n    .replace(/\\s+/g, ' ')\n    .trim()\n    .slice(0, 500);\n\nconst parseJson = value => {\n  if (\n    typeof value !== 'string' ||\n    !value.trim()\n  ) {\n    return null;\n  }\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return null;\n  }\n};\n\nconst extractEmbeddedError = value => {\n  if (\n    typeof value !== 'string'\n  ) {\n    return null;\n  }\n\n  const match =\n    value.match(\n      /^\\s*(\\d{3})\\s*-\\s*(\\{[\\s\\S]*\\})\\s*$/,\n    );\n\n  if (!match) {\n    return null;\n  }\n\n  const parsed =\n    parseJson(match[2]);\n\n  if (!parsed) {\n    return null;\n  }\n\n  return {\n    statusCode: Number(match[1]),\n    body: parsed,\n  };\n};\n\nconst nestedError =\n  input.error ??\n  input.body?.error ??\n  input;\n\nconst rawMessage =\n  nestedError?.message ??\n  input.message ??\n  '';\n\nconst embedded =\n  extractEmbeddedError(\n    rawMessage,\n  );\n\nconst body =\n  embedded?.body ??\n  input.body ??\n  input;\n\nconst statusCode =\n  Number(\n    input.statusCode ??\n    input.status_code ??\n    input.httpStatus ??\n    input.http_status ??\n    input.error?.statusCode ??\n    input.error?.status_code ??\n    input.error?.httpCode ??\n    input.error?.status ??\n    embedded?.statusCode ??\n    body?.statusCode ??\n    0,\n  );\n\nconst providerErrorCode =\n  body?.error?.code ??\n  input.error?.code ??\n  nestedError?.code ??\n  null;\n\nconst diagnostic =\n  body?.error?.message ??\n  nestedError?.message ??\n  input.message ??\n  'Erro não detalhado retornado pelo Groq.';\n\nconst apiId =\n  $('Associar API a Tarefa')\n    .item\n    .json\n    ?.api_id ??\n  null;\n\nlet code =\n  'GROQ_API_ERROR';\n\nlet category =\n  'api';\n\nlet retryWithAnotherApi =\n  false;\n\n/*\n * Erros que justificam tentar outra API.\n */\nif (\n  providerErrorCode ===\n    'model_permission_blocked_org'\n) {\n  code =\n    'MODEL_PERMISSION_BLOCKED';\n\n  category =\n    'model_permission';\n\n  retryWithAnotherApi =\n    true;\n} else if (\n  statusCode === 401\n) {\n  code =\n    'AUTHENTICATION_FAILED';\n\n  category =\n    'authentication';\n\n  retryWithAnotherApi =\n    true;\n} else if (\n  statusCode === 403\n) {\n  code =\n    'AUTHORIZATION_FAILED';\n\n  category =\n    'authorization';\n\n  retryWithAnotherApi =\n    true;\n} else if (\n  statusCode === 429\n) {\n  code =\n    'LIMIT_EXCEEDED';\n\n  category =\n    'quota_or_rate_limit';\n\n  retryWithAnotherApi =\n    true;\n} else if (\n  [\n    408,\n    425,\n    500,\n    502,\n    503,\n    504,\n  ].includes(statusCode)\n) {\n  code =\n    'UPSTREAM_UNAVAILABLE';\n\n  category =\n    'upstream';\n\n  retryWithAnotherApi =\n    true;\n} else if (\n  providerErrorCode ===\n    'json_validate_failed'\n) {\n  /*\n   * Falha no JSON gerado pelo modelo.\n   * Não congela a API.\n   */\n  code =\n    'INVALID_MODEL_JSON';\n\n  category =\n    'response';\n\n  retryWithAnotherApi =\n    false;\n} else if (\n  statusCode === 400\n) {\n  code =\n    'INVALID_REQUEST';\n\n  category =\n    'request';\n\n  retryWithAnotherApi =\n    false;\n}\n\nreturn [\n  {\n    json: {\n      _route: 'error',\n      status: 'error',\n\n      code,\n      category,\n\n      diagnostic:\n        sanitize(\n          embedded?.body?.error?.message ??\n          diagnostic,\n        ),\n\n      provider_error_code:\n        providerErrorCode,\n\n      http_status:\n        statusCode || null,\n\n      retry_with_another_api:\n        retryWithAnotherApi,\n\n      block_seconds:\n        retryWithAnotherApi\n          ? 3600\n          : null,\n\n      api_id:\n        apiId,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        -64
+      ],
+      "id": "bde69ceb-2055-40eb-a9bb-8fd6b3cf8d90",
+      "name": "Normalizar Erro Groq"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "8efc1eaf-e523-4c05-b099-f009c824a49a",
+              "leftValue": "={{ $json.retry_with_another_api }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1008,
+        224
+      ],
+      "id": "5731dce7-c089-4e11-a2dc-0177042bb3f6",
+      "name": " Congelar API?"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const input =\n  $input.item.json ?? {};\n\nconst sanitize = value =>\n  String(value ?? '')\n    .replace(\n      /Bearer\\s+[A-Za-z0-9._~+/=-]+/gi,\n      'Bearer [REDACTED]',\n    )\n    .replace(/\\s+/g, ' ')\n    .trim()\n    .slice(0, 1000);\n\nconst code =\n  input.code ??\n  input.provider_error_code ??\n  'GROQ_API_ERROR';\n\nconst category =\n  input.category ??\n  'api';\n\nconst diagnostic =\n  sanitize(\n    input.diagnostic ??\n    'A chamada ao Groq não foi concluída.',\n  );\n\nreturn {\n  json: {\n    _route: 'error',\n    status: 'error',\n\n    code,\n    category,\n    diagnostic,\n\n    provider_error_code:\n      input.provider_error_code ??\n      null,\n\n    http_status:\n      input.http_status ??\n      null,\n\n    retry_with_another_api:\n      input.retry_with_another_api === true,\n\n    block_seconds:\n      input.block_seconds ??\n      null,\n\n    api_id:\n      input.api_id ??\n      null,\n\n    erro: {\n      codigo: code,\n      categoria: category,\n      diagnostico: diagnostic,\n      http_status:\n        input.http_status ??\n        null,\n      provider_error_code:\n        input.provider_error_code ??\n        null,\n    },\n  },\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        480
+      ],
+      "id": "17ce3042-26f3-4d47-a32e-682c34afad5d",
+      "name": "Retorno Erro Groq"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const response =\n  $input.item.json ?? {};\n\nconst httpStatus = Number(\n  response.statusCode ?? 0,\n);\n\nconst body =\n  response.body ?? response;\n\nconst choice =\n  body?.choices?.[0];\n\nconst finishReason =\n  choice?.finish_reason ?? null;\n\nlet rawContent =\n  choice?.message?.content ??\n  body?.text ??\n  body?.content ??\n  '';\n\nif (\n  rawContent &&\n  typeof rawContent === 'object'\n) {\n  rawContent =\n    JSON.stringify(rawContent);\n}\n\nconst sanitize = value =>\n  String(value ?? '')\n    .replace(\n      /Bearer\\s+[A-Za-z0-9._~+/=-]+/gi,\n      'Bearer [REDACTED]',\n    )\n    .replace(/\\s+/g, ' ')\n    .trim()\n    .slice(0, 1000);\n\nconst errorResult = (\n  code,\n  category,\n  diagnostic,\n  details = [],\n) => ({\n  json: {\n    _route: 'result',\n    status: 'error',\n\n    code,\n    category,\n    diagnostic,\n    details,\n\n    http_status:\n      httpStatus || null,\n\n    finish_reason:\n      finishReason,\n\n    api_id:\n      $('Associar API a Tarefa')\n        .item\n        .json\n        ?.api_id ??\n      null,\n  },\n});\n\nif (\n  httpStatus < 200 ||\n  httpStatus >= 300\n) {\n  return errorResult(\n    'GROQ_API_ERROR',\n    'api',\n    sanitize(\n      body?.error?.message ??\n      body?.message ??\n      'A API Groq retornou erro.',\n    ),\n  );\n}\n\nif (\n  finishReason !== 'stop' &&\n  finishReason !== 'length'\n) {\n  return errorResult(\n    'INCOMPLETE_CLASSIFICATION',\n    'response',\n    'O modelo encerrou a resposta sem concluir a classificação.',\n  );\n}\n\nconst cleanJsonText = value =>\n  String(value ?? '')\n    .replace(\n      /```json\\s*/gi,\n      '',\n    )\n    .replace(\n      /```\\s*$/g,\n      '',\n    )\n    .replace(\n      /[\\u200b-\\u200d\\ufeff]/g,\n      '',\n    )\n    .trim();\n\nconst jsonText =\n  cleanJsonText(rawContent);\n\nif (!jsonText) {\n  return errorResult(\n    'EMPTY_CLASSIFICATION',\n    'response',\n    'A resposta do Groq não contém JSON.',\n  );\n}\n\nlet data;\n\ntry {\n  data =\n    JSON.parse(jsonText);\n} catch {\n  return errorResult(\n    'INVALID_CLASSIFICATION_JSON',\n    'response',\n    'A resposta do Groq não é um JSON válido.',\n    [\n      {\n        field: 'response',\n        value: sanitize(jsonText),\n      },\n    ],\n  );\n}\n\nif (\n  !data ||\n  typeof data !== 'object' ||\n  Array.isArray(data)\n) {\n  return errorResult(\n    'INVALID_CLASSIFICATION_OBJECT',\n    'response',\n    'A classificação deve ser um objeto JSON.',\n  );\n}\n\nconst toPositiveInteger = value => {\n  const number =\n    Number(value);\n\n  return Number.isInteger(number) &&\n    number > 0\n    ? number\n    : null;\n};\n\nconst toIdArray = value => {\n  const values =\n    Array.isArray(value)\n      ? value\n      : value === null ||\n        value === undefined ||\n        value === ''\n        ? []\n        : [value];\n\n  return values\n    .map(toPositiveInteger)\n    .filter(\n      value => value !== null,\n    );\n};\n\nconst categoriaId =\n  toPositiveInteger(\n    data.categoria_id ??\n    data.categoria ??\n    (\n      Array.isArray(\n        data.categories,\n      )\n        ? data.categories[0]\n        : data.categories\n    ),\n  );\n\nconst tagsIds =\n  toIdArray(\n    data.tags_ids ??\n    data.tags,\n  );\n\nconst llmAutorId =\n  toPositiveInteger(\n    data.autor_id ??\n    data.user_id ??\n    data.autoria ??\n    (\n      Array.isArray(data.autor)\n        ? data.autor[0]\n        : data.autor\n    ),\n  );\n\nconst details = [];\n\nif (\n  categoriaId === null\n) {\n  details.push({\n    field: 'categoria_id',\n    code: 'INVALID_CATEGORY_ID',\n    message:\n      'categoria_id deve ser um inteiro positivo.',\n  });\n}\n\nif (\n  tagsIds.length < 1 ||\n  tagsIds.length > 3\n) {\n  details.push({\n    field: 'tags_ids',\n    code: 'INVALID_TAG_COUNT',\n    message:\n      'tags_ids deve conter de 1 a 3 IDs.',\n  });\n}\n\nif (\n  new Set(tagsIds).size !==\n  tagsIds.length\n) {\n  details.push({\n    field: 'tags_ids',\n    code: 'DUPLICATE_TAGS',\n    message:\n      'tags_ids não pode conter IDs repetidos.',\n  });\n}\n\nif (\n  categoriaId !== null &&\n  tagsIds.includes(categoriaId)\n) {\n  details.push({\n    field: 'tags_ids',\n    code: 'CATEGORY_TAG_DUPLICATION',\n    message:\n      'O ID da categoria não deve ser repetido como tag.',\n  });\n}\n\nif (details.length > 0) {\n  return errorResult(\n    'INVALID_CLASSIFICATION',\n    'validation',\n    'A classificação retornada não possui estrutura válida.',\n    details,\n  );\n}\n\nlet start = {};\n\ntry {\n  start =\n    $('Start Classificar')\n      .first()\n      .json ?? {};\n} catch {\n  start = {};\n}\n\nconst promptSystem =\n  String(\n    start.prompt_system ??\n    start.MSG_Prompt_System ??\n    '',\n  );\n\n/*\n * Captura somente os números da seção AUTOR.\n *\n * Exemplos aceitos:\n *\n * CATÁLOGO AUTOR:\n * 1, 2, 13\n *\n * #5 - AUTOR:\n * 1, 2, 13\n *\n * A captura termina antes de:\n * - outro cabeçalho numerado;\n * - VALIDAÇÃO;\n * - FORMATO;\n * - SAÍDA.\n */\nconst authorSectionMatch =\n  promptSystem.match(\n    /(?:CAT[ÁA]LOGO\\s+AUTOR|#\\s*\\d+\\s*[-–]\\s*AUTOR)[^\\n]*(?:\\n|:)([\\s\\S]*?)(?=\\n\\s*(?:#\\s*\\d+|VALIDA[ÇC][ÃA]O|VALIDAÇÃO|FORMATO|SA[IÍ]DA)|$)/i,\n  );\n\nconst authorBlock =\n  authorSectionMatch?.[1] ??\n  '';\n\nconst authorIds = [\n  ...authorBlock.matchAll(\n    /\\b\\d+\\b/g,\n  ),\n]\n  .map(\n    match => Number(match[0]),\n  )\n  .filter(\n    id =>\n      Number.isInteger(id) &&\n      id > 0,\n  )\n  .filter(\n    (id, index, list) =>\n      list.indexOf(id) === index,\n  );\n\nif (\n  authorIds.length === 0\n) {\n  return errorResult(\n    'AUTHOR_LIST_NOT_FOUND',\n    'prompt',\n    'A lista de autores não foi encontrada no prompt_system.',\n  );\n}\n\n/*\n * Seleção final do autor pelo próprio fluxo.\n * Nenhum ID de autor fica fixo no código.\n */\nconst selectedAuthor =\n  authorIds[\n    Math.floor(\n      Math.random() *\n      authorIds.length,\n    )\n  ];\n\nreturn {\n  json: {\n    _route: 'result',\n    status: 'success',\n    classification_valid: true,\n\n    autor: [selectedAuthor],\n    categories: [categoriaId],\n    tags: tagsIds,\n\n    autor_id: selectedAuthor,\n    categoria_id: categoriaId,\n    tags_ids: tagsIds,\n\n    llm_autor_id:\n      llmAutorId,\n\n    author_selection:\n      'parent_prompt_random',\n\n    author_catalog_size:\n      authorIds.length,\n\n    usage:\n      body?.usage ??\n      null,\n\n    model:\n      body?.model ??\n      null,\n\n    api_id:\n      $('Associar API a Tarefa')\n        .item\n        .json\n        ?.api_id ??\n      null,\n\n    http_status:\n      httpStatus,\n\n    finish_reason:\n      finishReason,\n  },\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        -240
+      ],
+      "id": "730b92a1-4885-42d3-bd79-a65f68fb251b",
+      "name": "Validar Classificação Saída v0.2",
+      "retryOnFail": false,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "0c9f7e36-a89f-4f1f-9d70-1b3fbb11f71c",
+              "leftValue": "={{ $json.code === 'INVALID_MODEL_JSON' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        992,
+        -64
+      ],
+      "id": "fe877f9f-11df-4bee-aff7-fb62dfb7bf79",
+      "name": "IF | Erro de JSON?"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const normalizedError =\n  $input.item.json ?? {};\n\nconst maxAttempts = 3;\n\nconst errorResult = (\n  code,\n  diagnostic,\n  attempt = null,\n) => ({\n  json: {\n    _route: 'error',\n    status: 'error',\n\n    code,\n    category: 'response',\n    diagnostic,\n\n    provider_error_code:\n      normalizedError.provider_error_code ??\n      null,\n\n    http_status:\n      normalizedError.http_status ??\n      null,\n\n    api_id:\n      normalizedError.api_id ??\n      null,\n\n    attempt,\n    max_attempts: maxAttempts,\n\n    retry_with_another_api: false,\n    block_seconds: null,\n  },\n});\n\nlet failedRequest = null;\n\ntry {\n  failedRequest =\n    $('HTTP Groq Chat Completions')\n      .item\n      .json;\n} catch {\n  failedRequest = null;\n}\n\nif (\n  !failedRequest ||\n  typeof failedRequest !== 'object'\n) {\n  return errorResult(\n    'RETRY_CONTEXT_NOT_FOUND',\n    'Não foi possível recuperar a requisição que falhou.',\n  );\n}\n\nconst currentAttempt =\n  Number(failedRequest.attempt);\n\nif (\n  !Number.isInteger(currentAttempt) ||\n  currentAttempt < 1\n) {\n  return errorResult(\n    'INVALID_RETRY_ATTEMPT',\n    'A tentativa atual não foi encontrada ou é inválida.',\n  );\n}\n\nif (\n  currentAttempt >= maxAttempts\n) {\n  return errorResult(\n    'RETRY_EXHAUSTED',\n    'O Groq não produziu uma classificação válida após três tentativas.',\n    currentAttempt,\n  );\n}\n\nif (\n  !failedRequest.api_key ||\n  !failedRequest.request_body ||\n  typeof failedRequest.request_body !== 'object'\n) {\n  return errorResult(\n    'RETRY_REQUEST_INCOMPLETE',\n    'A requisição original não possui os dados necessários para repetir a chamada.',\n    currentAttempt,\n  );\n}\n\nconst requestBody = {\n  ...failedRequest.request_body,\n};\n\nconst retryMaxCompletionTokens =\n  Math.min(\n    4096,\n    Math.max(\n      2048,\n      (currentAttempt + 1) * 1024,\n    ),\n  );\n\nrequestBody.max_completion_tokens =\n  retryMaxCompletionTokens;\n\nrequestBody.response_format = {\n  type: 'json_object',\n};\n\nreturn {\n  json: {\n    _route: 'retry_json',\n    status: 'ready',\n\n    attempt:\n      currentAttempt + 1,\n\n    max_attempts:\n      maxAttempts,\n\n    api_id:\n      failedRequest.api_id ??\n      normalizedError.api_id ??\n      null,\n\n    api_key:\n      failedRequest.api_key,\n\n    model:\n      failedRequest.model ??\n      requestBody.model ??\n      null,\n\n    prompt_user:\n      failedRequest.prompt_user ??\n      null,\n\n    prompt_system:\n      failedRequest.prompt_system ??\n      null,\n\n    request_body:\n      requestBody,\n  },\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        -80
+      ],
+      "id": "8aa10eed-23e6-46cb-8e5e-7ad3ec673213",
+      "name": "Preparar Retry JSON"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "3a27a16e-3222-4120-b89c-c842b545d9d1",
+              "leftValue": "={{ $json._route === 'retry_json' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1440,
+        -80
+      ],
+      "id": "e81f2791-c1f5-407d-b158-802be8b7850b",
+      "name": "IF | Pode repetir JSON?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "f6498ec4-5384-433d-ad2b-0e8144d6f22a",
+              "leftValue": "={{ ['INCOMPLETE_CLASSIFICATION', 'EMPTY_CLASSIFICATION', 'INVALID_CLASSIFICATION_JSON', 'INVALID_CLASSIFICATION_OBJECT'].includes($json.code) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        992,
+        -240
+      ],
+      "id": "0fdcd5dd-743a-40f1-807e-a04a87a4a9bd",
+      "name": "IF | Repetir Resposta Incompleta?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input =\n  $input.first()?.json ?? {};\n\nconst body =\n  input.body ?? input;\n\nconst statusCode = Number(\n  input.statusCode ??\n  input.status_code ??\n  input.httpStatus ??\n  input.http_status ??\n  body?.statusCode ??\n  0,\n);\n\nconst isSuccess =\n  statusCode >= 200 &&\n  statusCode < 300 &&\n  Array.isArray(body?.choices);\n\nif (isSuccess) {\n  return [\n    {\n      json: {\n        ...input,\n        _route: 'response',\n        status: 'ready',\n      },\n    },\n  ];\n}\n\nreturn [\n  {\n    json: {\n      _route: 'error',\n      status: 'error',\n      statusCode: statusCode || null,\n      body,\n      message:\n        input.message ??\n        body?.message ??\n        body?.error?.message ??\n        'A chamada HTTP ao Groq retornou erro.',\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        -80
+      ],
+      "id": "8f9918d1-5b01-458d-b456-c1f6521a0d08",
+      "name": "Normalizar Retorno HTTP Groq"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "fba947a3-55b3-4f74-a43e-03ab3ac6c726",
+              "leftValue": "={{ $json._route === 'error' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        528,
+        -80
+      ],
+      "id": "537c900b-8311-4422-90e4-87b8906814fe",
+      "name": "IF | HTTP Groq com erro?"
+    }
+  ],
+  "pinData": {
+    "Start Classificar": [
+      {
+        "json": {
+          "prompt_user": "Você é um classificador de conteúdo jornalístico pora portal de notícias.\n\nSua tarefa é analisar o TÍTULO e CONTEXTO da notícia e retornar:\n\n- 1 categoria obrigatória (apenas UMA)\n- de 1 a 3 tags relevantes\n- 1 autor obrigatório (1 apenas)\n\nTÍTULO: Armazenamento de Energia é Investimento em Segurança e Redução de Custos ao Consumidor, diz ABSAE\nCONTEXTO: A Associação Brasileira de Armazenamento de Energia defende que o investimento em baterias é a solução mais econômica para o sistema elétrico, garantindo segurança energética e evitando custos tributários desnecessários repassados aos consumidores.\n",
+          "prompt_system": "Você é um classificador editorial.\n\nSua tarefa é classificar o título e o contexto recebidos usando exclusivamente os catálogos fornecidos abaixo.\n\nREGRAS DE RESPOSTA:\n\n1. Retorne somente um objeto JSON válido.\n2. Não escreva explicações, comentários ou Markdown.\n3. Não invente IDs.\n4. Não use nomes de categorias, tags ou autores na resposta.\n5. Todos os valores devem ser IDs inteiros.\n6. Escolha exatamente uma categoria.\n7. Escolha de uma a três tags.\n8. Escolha exatamente um autor da lista AUTOR.\n9. A escolha do autor é aleatória entre os IDs permitidos.\n10. categoria_id deve existir exclusivamente no catálogo CATEGORIAS.\n11. Cada item de tags_ids deve existir exclusivamente no catálogo TAGS.\n12. Nunca use um ID de CATEGORIAS dentro de tags_ids.\n13. Nunca use um ID de TAGS em categoria_id.\n14. Não repita a categoria como tag.\n15. Se o nome aparecer nos dois catálogos, use o ID correspondente ao catálogo correto.\n16. Antes de responder, confira cada ID contra o catálogo de origem.\n\nCATÁLOGO CATEGORIAS:\n\nid | categoria | descrição | url\n---|---|---|---\n1 | Negócios | Empresas e investimentos | /category/negocios/\n24 | Economia | Preços, tarifas, impostos e financeiro | /category/economia/\n25 | Geração | Produção de energia limpa | /category/geracao/\n26 | Renováveis | Energia limpa e sustentáveis | /category/energia-renovavel/\n283 | Mobilidade Elétrica | Carros elétricos, eletrificação carros verdes, carros de baixo carbono, preço de carro elétrico. | /category/mobilidade-eletrica/\n300 | Oportunidade | Mercado de trabalho e eventos | /category/oportunidades/\n411 | Mercado | Setor energético e tecnologias | /category/mercado/\n426 | Distribuição | Transmissão e entrega de energia | /category/distribuicao/\n456 | Política | Leis e políticas energéticas | /category/politica/\n467 | Regulação | Órgão e normas regulatórias | /category/regulacao/\n\nCATÁLOGO TAGS:\n\nid | tag | descrição | url\n---|---|---|---\n32 | Economia | Mercado e indicadores do setor elétrico | /tag/economia/\n67 | Geração Distribuída | Geração de energia compartilhada | /tag/geracao-distribuida/\n75 | Negócios | Empresas parcerias e investimentos | /tag/negocios/\n76 | Oportunidade | Mercado de trabalho, consultorias e eventos | /tag/oportunidade/\n78 | Matriz Energética | Conjuntos e formas de geração elétrica | /tag/matriz-energetica/\n93 | Política Energética | Leis e regulação do sertor elétrico | /tag/politica-energetica/\n102 | Transição Energética | Evolução e Mudanças no setor elétrico | /tag/transicao-energetica/\n103 | Tecnologia | Novidades do setor elétrico | /tag/tecnologia/\n114 | Mobilidade Elétrica | Transporte e eletro mobilidade | /tag/mobilidade-eletrica/\n145 | Conta de Luz | Despesas, custos e economia de energia | /tag/conta-de-luz/\n150 | Armazenamento | Baterias e carregadores | /tag/armazenamento/\n285 | Agronegócio | Oportunidades do Agro | /tag/agronegocio/\n294 | Hidrogênio Verde | Energia limpa e renovável | /tag/hidrogenio-verde/\n354 | Descarbonização | Redução de CO2 | /tag/descarbonizacao/\n362 | Economia Verde | ESG e políticas de sustentabilidade | tag/economia-verde/\n388 | Mercado de Trabaho | Vagas de emprego e oportunidades | /tag/mercado-de-trabalho/\n414 | Mercado | Setor energético e tecnologias | /tag/mercado/\n419 | Geração | Geração de energia solar, eólica e gás | /tag/geracao/\n428 | Distribuição | Transmissão e entrega de energia | /tag/distribuicao/\n468 | Regulação | Órgão e normas regulatórias | /tag/regulacao/\n474 | Terras Raras | Minerais críticos e beneficiamento de terras | /tag/terras-raras/\n476 | Marco Legal | Leis e regras | /tag/marco-legal/\n477 | Minerias Críticos | Extração e mineração | /tag/minerais-criticos/\n478 | Curtailment | Cortes de distribuição de energia | /tag/curtailment/\n480 | OffShore | Geração de energia em alto mar | /tag/offshore/\n481 | Petróleo e Gás | Energia fóssil | /tag/petroleo-e-gas/\n\nCATÁLOGO AUTOR:\n\n1, 2, 17\n\nVALIDAÇÃO INTERNA OBRIGATÓRIA:\n\n- categoria_id pertence ao CATÁLOGO CATEGORIAS;\n- todos os valores de tags_ids pertencem ao CATÁLOGO TAGS;\n- nenhum valor de tags_ids pertence apenas ao CATÁLOGO CATEGORIAS;\n- user_id pertence ao CATÁLOGO AUTOR;\n- tags_ids possui entre 1 e 3 valores;\n- todos os valores são inteiros;\n- não existem tags repetidas.\n\nFORMATO ÚNICO DE SAÍDA:\n\n{\n  \"user_id\": 1,\n  \"categoria_id\": 1,\n  \"tags_ids\": [75]\n}"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "SP Selecionar API Groq": {
+      "main": [
+        [
+          {
+            "node": "Associar API a Tarefa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Associar API a Tarefa": {
+      "main": [
+        [
+          {
+            "node": "API Disponivel?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Disponivel?": {
+      "main": [
+        [
+          {
+            "node": "HTTP Groq Chat Completions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retorno Erro Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Classificar": {
+      "main": [
+        [
+          {
+            "node": "SP Selecionar API Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Groq Chat Completions": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Retorno HTTP Groq",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Normalizar Erro Groq": {
+      "main": [
+        [
+          {
+            "node": "IF | Erro de JSON?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    " Congelar API?": {
+      "main": [
+        [
+          {
+            "node": "ERRO | Congelar API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retorno Erro Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ERRO | Congelar API": {
+      "main": [
+        [
+          {
+            "node": "SP Selecionar API Groq",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retorno Erro Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retorno Erro Groq": {
+      "main": [
+        []
+      ]
+    },
+    "IF | Erro de JSON?": {
+      "main": [
+        [
+          {
+            "node": "Preparar Retry JSON",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": " Congelar API?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Retry JSON": {
+      "main": [
+        [
+          {
+            "node": "IF | Pode repetir JSON?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF | Pode repetir JSON?": {
+      "main": [
+        [
+          {
+            "node": "HTTP Groq Chat Completions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retorno Erro Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Classificação Saída v0.2": {
+      "main": [
+        [
+          {
+            "node": "IF | Repetir Resposta Incompleta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF | Repetir Resposta Incompleta?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Preparar Retry JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Retorno HTTP Groq": {
+      "main": [
+        [
+          {
+            "node": "IF | HTTP Groq com erro?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF | HTTP Groq com erro?": {
+      "main": [
+        [
+          {
+            "node": "Validar Classificação Saída v0.2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normalizar Erro Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2459be13-ff1b-4ef6-b594-cffa2f042c92",
+  "meta": {},
+  "nodeGroups": [],
+  "id": "aMfJ1FNDs8nxGsWu",
+  "tags": []
+}
